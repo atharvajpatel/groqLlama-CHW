@@ -20,100 +20,24 @@ from pinecone import Pinecone
 import PyPDF2
 import openai
 from groq import Groq
+import os
+from dotenv import load_dotenv
+
 
 # Example usage of Groq LLM
 client = Groq(
     api_key="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",
 )
 
+load_dotenv()
 
-openai.api_key = "sk-proj-EJZKLFzKAlXoFfA16kiRT3BlbkFJm9UlctNyWRj0wN4ah9n3"   #4 Key
-
-def getData(tokens, overlap, path):
-
-  def extract_text_from_pdf(pdf_path):
-    text = ""
-    with open(pdf_path, "rb") as file:
-        pdf_reader = PyPDF2.PdfReader(file)
-        num_pages = len(pdf_reader.pages)
-        for page_num in range(num_pages):
-            page = pdf_reader.pages[page_num]
-            text += page.extract_text()
-    return text
-
-  # Replace "your_pdf_file.pdf" with the actual file name you uploaded
-  pdf_path = path
-  text = extract_text_from_pdf(pdf_path)
-
-  def split_text_into_chunks(text, word, overlap):
-    # Split the text into a list of words
-    words = text.split()
-    # Calculate the number of words in each chunk and the number of chunks
-    chunk_size = int(word)
-    num_chunks = int(len(words) / chunk_size) + 1
-    # Calculate the number of overlapping words
-    overlap_size = int(chunk_size * overlap)
-    # Create a list to store the chunks
-    chunks = []
-    # Loop through the text and create the chunks
-    for i in range(num_chunks):
-        # Calculate the start and end indices for the current chunk
-        start = i * chunk_size
-        end = min((i + 1) * chunk_size, len(words))
-        # If this is not the first chunk, add the overlapping words from the previous chunk
-        if i > 0:
-            start -= overlap_size
-        # Create the chunk and add it to the list
-        chunk = ' '.join(words[start:end])
-        chunks.append(chunk)
-    return chunks
-
-  tokens = tokens
-  word = tokens * 0.75 #Constant proportion
-  overlap = overlap #Number between 0-1 as a percent
-  chunks = split_text_into_chunks(text, word, overlap)
-  i = 0
-  my_list = []
-  for chunk in chunks:
-      my_list.append(chunk)
-  return my_list, extract_text_from_pdf(pdf_path)
+openai.api_key = os.getenv("API_KEY")  #4 Key
 
 def getIndex():
   pc = Pinecone(api_key="d403ddc4-dc54-47d5-9c8f-ed19848d06ce")
   index = pc.Index("final-asha")
   return index
 
-def upserts(q, values, index):
-  index = index
-  my_list = values
-
-  query = q
-  MODEL = "text-embedding-3-small"
-
-  res = openai.Embedding.create(
-      input=[query], engine=MODEL
-  )
-
-  embeds = [record['embedding'] for record in res['data']]
-
-  # load the first 1K rows of the TREC dataset
-  #trec = load_dataset('trec', split='train[:1000]')
-
-  batch_size = 32  # process everything in batches of 32
-  for i in tqdm(range(0, len(my_list), batch_size)):
-      # set end position of batch
-      i_end = min(i+batch_size, len(my_list))
-      # get batch of lines and IDs
-      lines_batch = my_list[i: i+batch_size]
-      ids_batch = [str(n) for n in range(i, i_end)]
-      # create embeddings
-      res = openai.Embedding.create(input=lines_batch, engine=MODEL)
-      embeds = [record['embedding'] for record in res['data']]
-      # prep metadata and upsert batch
-      meta = [{'text': line} for line in lines_batch]
-      to_upsert = zip(ids_batch, embeds, meta)
-      # upsert to Pinecone
-      index.upsert(vectors=list(to_upsert))
 
 def getRes(query, index):
   query = query
@@ -195,13 +119,8 @@ def getFinalSummaryGPT4(my_list, queryContext):
 
   return final_summary
 
-def preprocess(tokens, overlap, path):
-   mylist, allText = getData(tokens, overlap, path)
-   index = getIndex()
-   return index
 
 def main (query, index, context):
-    index = index
     contextQuery = query + context
     quotes = vectorQuotes(query, index)
     summary = getFinalSummaryGPT4(quotes, contextQuery)
@@ -243,7 +162,7 @@ def promptGuidelinesFlow(tokens=500, overlap=0.1, path="allAsha.pdf", pastDict={
     print("got here")
     done = False
     role = ("Imagine you’re a wise and attentive doctor giving advice to a community health worker (CHW) who is helping people. This is not a standard hospital and does not follow western medicine protocol. Assume your pretraining is not the ground truth but the information and quotes provided is. The CHW is in a 3rd world country and only has access to basic medical equipment. Respond extremely professionally and don't make small talk like 'great to meet you' just get to the point. Don't say chat has ended. Do not mention anyone's name unless specified in chat")
-    index = preprocess(tokens, overlap, path)
+    index = getIndex()
 
     # If the first query is empty or None (i.e. fresh session)
     if not query:
@@ -286,7 +205,8 @@ def promptGuidelinesFlow(tokens=500, overlap=0.1, path="allAsha.pdf", pastDict={
 
     # Update the pastDict with the latest query-response pair
     pastDict[query] = finalSummary
-
+    print("Should return")
+    
     if done:
         return "Error"
     else:

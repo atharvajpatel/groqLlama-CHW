@@ -33,6 +33,7 @@ def get_response():
         # Update session with the new conversation state (update pastDict)
         session['pastDict'] = pastDict
     except Exception as e:
+        print(e)
         response = "Error processing your request. Please try again later."
 
     return jsonify({"response": response})
