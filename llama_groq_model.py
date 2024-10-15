@@ -31,7 +31,7 @@ client = Groq(
 
 load_dotenv()
 
-openai.api_key = os.getenv("API_KEY")  #4 Key
+openai.api_key = os.getenv("APIKEY")  #4 Key
 
 def getIndex():
   pc = Pinecone(api_key="d403ddc4-dc54-47d5-9c8f-ed19848d06ce")
